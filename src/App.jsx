@@ -1,45 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ShoppingCart, Settings, RefreshCw, CreditCard, CheckCircle, BarChart3, Save, Smartphone, X, Coins, Banknote, Edit3, Trophy, Ticket, Trash2, ChevronDown, ChevronRight, Calculator, Tag, ChefHat, Wifi, WifiOff, User, CloudOff, Send, Minus, Plus, Download, LayoutGrid, RotateCcw, HelpCircle, Copy, Link2, Check, Cloud, CloudLightning, Inbox, Loader2, Users, Clock, Monitor, DollarSign, LogOut } from 'lucide-react';
-import { initializeApp } from "firebase/app";
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "firebase/auth";
-import { getFirestore, doc, setDoc, onSnapshot } from "firebase/firestore";
-
-// --- Firebase Init (Environment Compatible) ---
-const getFirebaseConfig = () => {
-  // 1. Playground Environment (この画面上での動作)
-  if (typeof __firebase_config !== 'undefined') {
-    return JSON.parse(__firebase_config);
-  }
-  
-  // 2. Vercel / Vite Environment (外部デプロイ用)
-  // .envファイル等から読み込む想定 (import.meta.envはVite標準)
-  try {
-    return {
-      apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-      authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-      projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-      storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-      messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-      appId: import.meta.env.VITE_FIREBASE_APP_ID
-    };
-  } catch (e) {
-    console.warn("Environment variables not found.");
-    return {};
-  }
-};
-
-// アプリIDの取得（デプロイ時は固定値を使用）
-const getAppId = () => {
-  if (typeof __app_id !== 'undefined') return __app_id;
-  return 'production-bunkasai-pos'; // 任意の固定ID
-};
-
-const firebaseConfig = getFirebaseConfig();
-// 設定が空の場合は初期化をスキップ（エラー回避）
-const app = Object.keys(firebaseConfig).length > 0 ? initializeApp(firebaseConfig) : null;
-const auth = app ? getAuth(app) : null;
-const db = app ? getFirestore(app) : null;
-const appId = getAppId();
+import { ShoppingCart, Settings, RefreshCw, CheckCircle, BarChart3, Save, X, Edit3, Trash2, ChevronRight, Calculator, Wifi, WifiOff, User, CloudOff, Minus, Plus, Download, LayoutGrid, RotateCcw, HelpCircle, Copy, Link2, Check, Cloud, CloudLightning, Inbox, Loader2, Users, Clock, Monitor, DollarSign } from 'lucide-react';
 
 // --- 初期データ ---
 const INITIAL_MENU = [
@@ -62,7 +22,6 @@ const SAMPLE_DATA_TSV = INITIAL_MENU.map(i => `${i.id}\t${i.category}\t${i.name}
 const SAMPLE_STAFF_TSV = INITIAL_STAFF.map(s => `${s.name}\t${s.shift}\t${s.role}`).join('\n');
 
 const CATEGORIES_LIST = ['主食', 'サイド', 'ドリンク', 'デザート', 'その他'];
-const STAFF_PRESETS = ["A班", "B班", "C班", "先生"];
 const MONEY_BUTTONS = [{val:1000, label:'1000'}, {val:500, label:'500'}, {val:100, label:'100'}];
 
 // 金種リスト（レジ締め用）
@@ -225,8 +184,6 @@ const Toast = ({ message, type, onClose }) => {
 
 // --- Main Component ---
 export default function FestivalPOS() {
-  // Global State
-  const [user, setUser] = useState(null);
   
   // App States
   const [activeTab, setActiveTab] = useState('register');
@@ -277,52 +234,6 @@ export default function FestivalPOS() {
   const showToast = (message, type = 'info') => setToast({ message, type });
   const play = (type) => playSound(type);
 
-  // --- Auth & Persistence ---
-  useEffect(() => {
-    if (!auth) return;
-    const initAuth = async () => {
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        // Playground: Custom Token
-        await signInWithCustomToken(auth, __initial_auth_token);
-      } else {
-        // Vercel / Standard: Anonymous Auth
-        await signInAnonymously(auth);
-      }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, setUser);
-    return () => unsubscribe();
-  }, []);
-
-  // Sync Settings & Display Number from Firestore
-  useEffect(() => {
-    if (!user || !db) return;
-    
-    // 設定同期
-    const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config');
-    const unsubSettings = onSnapshot(settingsRef, (doc) => {
-      if (doc.exists()) {
-        const data = doc.data();
-        if (data.gasUrl && data.gasUrl !== gasUrl) setGasUrl(data.gasUrl);
-        if (data.salesTarget) setSalesTarget(data.salesTarget);
-      }
-    });
-
-    // 客用ディスプレイ番号同期
-    const displayRef = doc(db, 'artifacts', appId, 'public', 'data', 'display', 'status');
-    const unsubDisplay = onSnapshot(displayRef, (doc) => {
-      if (doc.exists()) {
-        const data = doc.data();
-        if (data.orderNumber) {
-          setDisplayOrderNumber(data.orderNumber);
-          if (activeTab === 'customer') play('bell'); // 客用画面なら音を鳴らす
-        }
-      }
-    });
-
-    return () => { unsubSettings(); unsubDisplay(); };
-  }, [user, activeTab]);
-
   // Load/Save LocalStorage
   useEffect(() => {
     const load = (key, setter) => { const v = localStorage.getItem(key); if(v) setter(JSON.parse(v)); };
@@ -333,10 +244,16 @@ export default function FestivalPOS() {
     load('bunka_order_num', setOrderNumber);
     load('bunka_queue_mode', setIsQueueMode);
     load('bunka_cash_counts', setCashCounts); // レジ締めデータ
+    load('bunka_display_num', setDisplayOrderNumber);
+    
+    // 設定関連
     const savedDev = localStorage.getItem('bunka_device'); if(savedDev) setDeviceName(savedDev);
     const savedStaff = localStorage.getItem('bunka_staff_name'); if(savedStaff) setStaffName(savedStaff);
+    const savedGasUrl = localStorage.getItem('bunka_gas_url'); if(savedGasUrl) setGasUrl(savedGasUrl);
+    const savedTarget = localStorage.getItem('bunka_sales_target'); if(savedTarget) setSalesTarget(Number(savedTarget));
   }, []);
 
+  // Persist State to LocalStorage
   useEffect(() => localStorage.setItem('bunka_menu', JSON.stringify(menuItems)), [menuItems]);
   useEffect(() => localStorage.setItem('bunka_staff', JSON.stringify(staffList)), [staffList]);
   useEffect(() => localStorage.setItem('bunka_history', JSON.stringify(salesHistory)), [salesHistory]);
@@ -346,23 +263,21 @@ export default function FestivalPOS() {
   useEffect(() => localStorage.setItem('bunka_staff_name', staffName), [staffName]);
   useEffect(() => localStorage.setItem('bunka_queue_mode', JSON.stringify(isQueueMode)), [isQueueMode]);
   useEffect(() => localStorage.setItem('bunka_cash_counts', JSON.stringify(cashCounts)), [cashCounts]);
+  useEffect(() => localStorage.setItem('bunka_gas_url', gasUrl), [gasUrl]);
+  useEffect(() => localStorage.setItem('bunka_sales_target', String(salesTarget)), [salesTarget]);
+  useEffect(() => localStorage.setItem('bunka_display_num', JSON.stringify(displayOrderNumber)), [displayOrderNumber]);
 
-  // Save Settings to Firestore
-  const updateRemoteSettings = async (newUrl, newTarget) => {
-    if (!user || !db) return;
-    const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config');
-    await setDoc(settingsRef, { 
-      gasUrl: newUrl !== undefined ? newUrl : gasUrl,
-      salesTarget: newTarget !== undefined ? newTarget : salesTarget
-    }, { merge: true });
-  };
-
-  // Update Display Number in Firestore
-  const updateDisplayNumber = async (num) => {
-    if (!user || !db) return;
-    const displayRef = doc(db, 'artifacts', appId, 'public', 'data', 'display', 'status');
-    await setDoc(displayRef, { orderNumber: num }, { merge: true });
-  };
+  // Tab Sync (同じブラウザの別タブで客用画面を開いたとき用)
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === 'bunka_display_num' && e.newValue) {
+        setDisplayOrderNumber(JSON.parse(e.newValue));
+        if (activeTab === 'customer') play('bell');
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [activeTab]);
 
   // --- Calculations ---
   const totalAmount = useMemo(() => cart.reduce((sum, i) => sum + i.price * i.quantity, 0), [cart]);
@@ -465,8 +380,8 @@ export default function FestivalPOS() {
         isOfflineAction = true;
     }
 
-    // Update Display Number (Shared)
-    updateDisplayNumber(orderNumber);
+    // Update Display Number (Shared within browser)
+    setDisplayOrderNumber(orderNumber);
 
     play('success');
     setLastOrderDetails({ total: totalAmount, deposit: finalDeposit, change: finalDeposit - totalAmount, orderNumber, isOfflineAction });
@@ -743,7 +658,7 @@ export default function FestivalPOS() {
           {/* === 客用ディスプレイ (New!) === */}
           {activeTab === 'customer' && (
             <div className="h-full flex flex-col items-center justify-center bg-slate-900 text-white p-8 text-center relative overflow-hidden">
-              <div className="absolute top-4 left-4 text-xs opacity-50 flex items-center gap-2"><Wifi size={12}/> 接続中</div>
+              <div className="absolute top-4 left-4 text-xs opacity-50 flex items-center gap-2"><Wifi size={12}/> {navigator.onLine ? 'ローカル接続' : 'オフライン'}</div>
               
               <div className="mb-8">
                 <h2 className="text-2xl font-bold text-blue-400 mb-2 tracking-widest">CALL NUMBER</h2>
@@ -763,6 +678,7 @@ export default function FestivalPOS() {
                   番号が呼ばれましたら、商品受け渡し口までお越しください。<br/>
                   お手元のレシート番号（またはスマホ画面）をご提示ください。
                 </p>
+                <p className="text-xs text-slate-500 mt-4 border-t border-slate-700 pt-2">※異なる端末間での番号同期は行われません</p>
               </div>
             </div>
           )}
