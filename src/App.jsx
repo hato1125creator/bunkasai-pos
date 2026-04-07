@@ -1,14 +1,20 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ShoppingCart, Settings, RefreshCw, CheckCircle, BarChart3, Save, X, Edit3, Trash2, ChevronRight, Calculator, Wifi, WifiOff, User, CloudOff, Minus, Plus, Download, LayoutGrid, RotateCcw, HelpCircle, Copy, Link2, Check, Cloud, CloudLightning, Inbox, Loader2, Users, Clock, Monitor, DollarSign } from 'lucide-react';
+import { 
+  ShoppingCart, Settings, RefreshCw, CheckCircle, BarChart3, 
+  X, Edit3, Trash2, ChevronRight, Calculator, Wifi, 
+  User, CloudOff, Minus, Plus, Download, LayoutGrid, 
+  RotateCcw, HelpCircle, Copy, Link2, Check, Cloud, 
+  CloudLightning, Inbox, Loader2, Users, Clock, Monitor, DollarSign, Image as ImageIcon, Layers 
+} from 'lucide-react';
 
 // --- 初期データ ---
 const INITIAL_MENU = [
-  { id: 'm1', category: '主食', name: '焼きそば', price: 400, stock: 50, initialStock: 50 },
-  { id: 'm2', category: '主食', name: 'オムライス', price: 500, stock: 30, initialStock: 30 }, 
-  { id: 'm3', category: 'サイド', name: 'フランクフルト', price: 200, stock: 100, initialStock: 100 },
-  { id: 'm4', category: 'ドリンク', name: 'タピオカ', price: 250, stock: 80, initialStock: 80 },
-  { id: 'm5', category: 'ドリンク', name: 'ラムネ', price: 150, stock: 120, initialStock: 120 },
-  { id: 'm6', category: 'デザート', name: 'パンケーキ', price: 300, stock: 40, initialStock: 40 },
+  { id: 'm1', category: '主食', name: '焼きそば', price: 400, stock: 50, initialStock: 50, imageUrl: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&q=80&w=400', toppings: [{name: '目玉焼き', price: 50}, {name: '大盛り', price: 100}] },
+  { id: 'm2', category: '主食', name: 'オムライス', price: 500, stock: 30, initialStock: 30, imageUrl: 'https://images.unsplash.com/photo-1614548624185-30018d96b007?auto=format&fit=crop&q=80&w=400', toppings: [{name: 'チーズ', price: 50}, {name: '大盛り', price: 100}] }, 
+  { id: 'm3', category: 'サイド', name: 'フランクフルト', price: 200, stock: 100, initialStock: 100, imageUrl: 'https://images.unsplash.com/photo-1595286595829-1959728cb187?auto=format&fit=crop&q=80&w=400', toppings: [{name: 'ケチャップ増し', price: 0}, {name: 'マスタード', price: 0}] },
+  { id: 'm4', category: 'ドリンク', name: 'タピオカ', price: 250, stock: 80, initialStock: 80, imageUrl: 'https://images.unsplash.com/photo-1551608974-9eb51b1f09bb?auto=format&fit=crop&q=80&w=400', toppings: [{name: 'タピオカ2倍', price: 50}] },
+  { id: 'm5', category: 'ドリンク', name: 'ラムネ', price: 150, stock: 120, initialStock: 120, imageUrl: '', toppings: [] },
+  { id: 'm6', category: 'デザート', name: 'パンケーキ', price: 300, stock: 40, initialStock: 40, imageUrl: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&q=80&w=400', toppings: [{name: 'ホイップ増量', price: 50}, {name: 'チョコソース', price: 30}] },
 ];
 
 const INITIAL_STAFF = [
@@ -17,9 +23,6 @@ const INITIAL_STAFF = [
   { name: "C班", shift: "14:00-16:00", role: "レジ" },
   { name: "先生", shift: "終日", role: "監督" },
 ];
-
-const SAMPLE_DATA_TSV = INITIAL_MENU.map(i => `${i.id}\t${i.category}\t${i.name}\t${i.price}\t${i.stock}`).join('\n');
-const SAMPLE_STAFF_TSV = INITIAL_STAFF.map(s => `${s.name}\t${s.shift}\t${s.role}`).join('\n');
 
 const CATEGORIES_LIST = ['主食', 'サイド', 'ドリンク', 'デザート', 'その他'];
 const MONEY_BUTTONS = [{val:1000, label:'1000'}, {val:500, label:'500'}, {val:100, label:'100'}];
@@ -36,121 +39,6 @@ const CASH_DENOMINATIONS = [
   { val: 5, label: '5円玉' },
   { val: 1, label: '1円玉' },
 ];
-
-// --- GASコード ---
-const GAS_CODE_TEMPLATE = `// 以下のコードをGoogle Apps Scriptに貼り付けてください
-
-const SHEET_NAME_MENU = "Menu";
-const SHEET_NAME_SALES = "Sales"; 
-const SHEET_NAME_STAFF = "Staff";
-
-function doGet(e) {
-  const action = e.parameter.action;
-  if (action === "getMenu") return getMenuData();
-  else if (action === "getStaff") return getStaffData();
-  else if (action === "getSales") return getSalesData(e.parameter.limit);
-  else if (action === "ping") return createJsonResponse({ status: "success", message: "Connected!" });
-  return createJsonResponse({ status: "error", message: "Invalid action" });
-}
-
-function doPost(e) {
-  try {
-    const data = JSON.parse(e.postData.contents);
-    if (data.action === "updateProduct") return updateProduct(data.product);
-    if (data.action === "deleteProduct") return deleteProduct(data.id);
-    return saveOrder(data); 
-  } catch (error) {
-    return createJsonResponse({ status: "error", message: error.toString() });
-  }
-}
-
-function getMenuData() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAME_MENU);
-  if (!sheet) return createJsonResponse({ status: "error", message: "Menu sheet not found" });
-  const data = sheet.getDataRange().getValues();
-  data.shift();
-  const items = data.map(row => ({
-    id: row[0], category: row[1], name: row[2], price: Number(row[3]), stock: Number(row[4])
-  })).filter(i => i.id);
-  return createJsonResponse({ items: items });
-}
-
-function getStaffData() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAME_STAFF);
-  if (!sheet) return createJsonResponse({ staff: [] });
-  const data = sheet.getDataRange().getValues();
-  data.shift();
-  const staff = data.map(row => ({
-    name: row[0], shift: row[1], role: row[2]
-  })).filter(s => s.name);
-  return createJsonResponse({ staff: staff });
-}
-
-function getSalesData(limit) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAME_SALES);
-  if (!sheet) return createJsonResponse({ sales: [] });
-  const lastRow = sheet.getLastRow();
-  if (lastRow <= 1) return createJsonResponse({ sales: [] });
-  const startRow = Math.max(2, lastRow - (limit || 50) + 1);
-  const data = sheet.getRange(startRow, 1, lastRow - startRow + 1, 7).getValues();
-  const sales = data.reverse().map(row => ({
-    timestamp: row[0], total: Number(row[1]), items: JSON.parse(row[2]||'[]'), paymentMethod: row[3], deviceId: row[4], orderNumber: row[5], staffName: row[6]
-  }));
-  return createJsonResponse({ sales: sales });
-}
-
-function updateProduct(p) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAME_MENU);
-  const data = sheet.getDataRange().getValues();
-  let found = false;
-  for(let i=1; i<data.length; i++) {
-    if(data[i][0] == p.id) {
-      sheet.getRange(i+1, 1, 1, 5).setValues([[p.id, p.category, p.name, p.price, p.stock]]);
-      found = true; break;
-    }
-  }
-  if(!found) sheet.appendRow([p.id, p.category, p.name, p.price, p.stock]);
-  return createJsonResponse({ status: "success" });
-}
-
-function deleteProduct(id) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAME_MENU);
-  const data = sheet.getDataRange().getValues();
-  for(let i=1; i<data.length; i++) {
-    if(data[i][0] == id) { sheet.deleteRow(i+1); break; }
-  }
-  return createJsonResponse({ status: "success" });
-}
-
-function saveOrder(d) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sales = ss.getSheetByName(SHEET_NAME_SALES);
-  if (sales) sales.appendRow([new Date(), d.total, JSON.stringify(d.items), d.paymentMethod, d.deviceId, d.orderNumber, d.staffName]);
-  
-  const menu = ss.getSheetByName(SHEET_NAME_MENU);
-  if (menu) {
-    const data = menu.getDataRange().getValues();
-    d.items.forEach(item => {
-      for(let i=1; i<data.length; i++) {
-        if(data[i][0] == item.id) {
-          const newStock = Number(data[i][4]) - item.quantity;
-          menu.getRange(i+1, 5).setValue(newStock);
-          break;
-        }
-      }
-    });
-  }
-  return createJsonResponse({ status: "success" });
-}
-
-function createJsonResponse(data) {
-  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
-}`;
 
 // --- Utils ---
 const playSound = (type) => {
@@ -182,8 +70,25 @@ const Toast = ({ message, type, onClose }) => {
   );
 };
 
+// トッピング文字列パース用
+const parseToppings = (str) => {
+  if (!str) return [];
+  return str.split(',').map(s => {
+    const parts = s.split(':');
+    if(parts.length >= 2) {
+        return { name: parts[0].trim(), price: parseInt(parts[1]) || 0 };
+    }
+    return null;
+  }).filter(t => t && t.name);
+};
+
+const stringifyToppings = (toppings) => {
+  if (!toppings || !toppings.length) return '';
+  return toppings.map(t => `${t.name}:${t.price}`).join(', ');
+};
+
 // --- Main Component ---
-export default function FestivalPOS() {
+export default function App() {
   
   // App States
   const [activeTab, setActiveTab] = useState('register');
@@ -222,6 +127,10 @@ export default function FestivalPOS() {
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
   const [customPriceInput, setCustomPriceInput] = useState('');
   
+  // トッピング機能用ステート
+  const [toppingModalItem, setToppingModalItem] = useState(null);
+  const [selectedToppings, setSelectedToppings] = useState([]);
+
   // Payment
   const [deposit, setDeposit] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
@@ -280,7 +189,12 @@ export default function FestivalPOS() {
   }, [activeTab]);
 
   // --- Calculations ---
-  const totalAmount = useMemo(() => cart.reduce((sum, i) => sum + i.price * i.quantity, 0), [cart]);
+  // 合計計算（トッピング込み）
+  const totalAmount = useMemo(() => cart.reduce((sum, i) => {
+    const itemTotal = i.price + (i.toppings?.reduce((tSum, t) => tSum + t.price, 0) || 0);
+    return sum + itemTotal * i.quantity;
+  }, 0), [cart]);
+
   const totalQuantity = useMemo(() => cart.reduce((sum, i) => sum + i.quantity, 0), [cart]);
   const changeAmount = useMemo(() => (parseInt(deposit)||0) - totalAmount, [deposit, totalAmount]);
   const salesSummary = useMemo(() => {
@@ -293,7 +207,6 @@ export default function FestivalPOS() {
     };
   }, [salesHistory]);
 
-  // レジ締め用計算
   const cashTotal = useMemo(() => {
     return CASH_DENOMINATIONS.reduce((sum, d) => sum + (d.val * (cashCounts[d.val] || 0)), 0);
   }, [cashCounts]);
@@ -306,6 +219,7 @@ export default function FestivalPOS() {
       const resMenu = await fetch(`${gasUrl}?action=getMenu`);
       const dataMenu = await resMenu.json();
       if (dataMenu.items) {
+        // GAS側からの同期でも既存のローカルデータ(画像やトッピング)を極力マージする
         setMenuItems(prev => {
           const newMap = new Map(dataMenu.items.map(i => [i.id, i]));
           return prev.map(p => newMap.has(p.id) ? { ...p, ...newMap.get(p.id) } : p);
@@ -335,16 +249,46 @@ export default function FestivalPOS() {
     } catch (e) { showToast('履歴同期失敗', 'error'); } finally { setIsHistorySyncing(false); }
   };
 
-  const addToCart = (item, isCustom) => {
+  // 商品タップ時のハンドラ（トッピングがあればモーダルを開く）
+  const handleItemClick = (item, isCustom) => {
     if (!isCustom && item.stock <= 0) { play('error'); showToast('在庫切れです', 'error'); return; }
+    
+    if (item.toppings && item.toppings.length > 0) {
+      setToppingModalItem(item);
+      setSelectedToppings([]); // 選択をリセット
+    } else {
+      executeAddToCart(item, [], isCustom);
+    }
+  };
+
+  // カートへ実際に投入する処理
+  const executeAddToCart = (item, toppings = [], isCustom = false) => {
     play('beep');
     setCart(prev => {
-      const exist = prev.find(i => i.id === item.id && i.price === item.price);
-      if (exist) {
-        if (!isCustom && exist.quantity >= item.stock) { showToast('在庫不足', 'error'); return prev; }
-        return prev.map(i => (i.id === item.id && i.price === item.price) ? { ...i, quantity: i.quantity + 1 } : i);
+      // トッピング構成が完全に一致するものを探す
+      const toppingsStr = JSON.stringify([...toppings].sort((a,b)=>a.name.localeCompare(b.name)));
+      const existIdx = prev.findIndex(i => 
+        i.id === item.id && 
+        i.price === item.price && 
+        JSON.stringify([...(i.toppings||[])].sort((a,b)=>a.name.localeCompare(b.name))) === toppingsStr
+      );
+      
+      if (existIdx >= 0) {
+        if (!isCustom && prev[existIdx].quantity >= item.stock) { showToast('在庫不足', 'error'); return prev; }
+        const newCart = [...prev];
+        newCart[existIdx].quantity += 1;
+        return newCart;
       }
-      return [...prev, { ...item, quantity: 1 }];
+      return [...prev, { ...item, quantity: 1, toppings, cartId: `c-${Date.now()}-${Math.random()}` }];
+    });
+    setToppingModalItem(null);
+  };
+
+  // トッピングのトグル処理
+  const toggleTopping = (topping) => {
+    setSelectedToppings(prev => {
+      if (prev.find(t => t.name === topping.name)) return prev.filter(t => t.name !== topping.name);
+      return [...prev, topping];
     });
   };
 
@@ -359,8 +303,9 @@ export default function FestivalPOS() {
 
     setIsOrderSyncing(true);
     setMenuItems(prev => prev.map(m => {
-      const cItem = cart.find(c => c.id === m.id);
-      return (cItem && !cItem.id.toString().startsWith('custom')) ? { ...m, stock: m.stock - cItem.quantity } : m;
+      // カート内の同一IDの数量を合計して在庫を引く
+      const totalQty = cart.filter(c => c.id === m.id).reduce((sum, c) => sum + c.quantity, 0);
+      return (totalQty > 0 && !m.id.toString().startsWith('custom')) ? { ...m, stock: m.stock - totalQty } : m;
     }));
     setSalesHistory(prev => [orderData, ...prev]);
 
@@ -380,7 +325,6 @@ export default function FestivalPOS() {
         isOfflineAction = true;
     }
 
-    // Update Display Number (Shared within browser)
     setDisplayOrderNumber(orderNumber);
 
     play('success');
@@ -399,7 +343,6 @@ export default function FestivalPOS() {
     let successCount = 0;
     const remaining = [];
 
-    // Send one by one to ensure order
     for (const order of unsentOrders) {
       try { await fetch(gasUrl, { method: 'POST', body: JSON.stringify(order) }); successCount++; } 
       catch (e) { remaining.push(order); }
@@ -407,7 +350,6 @@ export default function FestivalPOS() {
 
     setUnsentOrders(remaining);
     setIsSendingQueue(false);
-    
     if (successCount > 0) { showToast(`${successCount}件 送信完了`, "success"); play('success'); }
   };
 
@@ -416,6 +358,7 @@ export default function FestivalPOS() {
     if (editingProduct) setMenuItems(prev => prev.map(i => i.id === product.id ? product : i));
     else setMenuItems(prev => [...prev, { ...product, id: `m-${Date.now()}`, initialStock: product.stock }]);
     
+    // 画像URLやトッピングはローカルストレージのみ対応とし、GAS更新時のペイロードは現状維持（あるいは拡張しても良いが今回はエラー防止のためそのまま）
     if (gasUrl && navigator.onLine && !isQueueMode) {
       try { await fetch(gasUrl, { method: 'POST', body: JSON.stringify({ action: 'updateProduct', product }) }); showToast('保存しました', 'success'); }
       catch(e) { showToast('ローカルのみ保存しました', 'warning'); }
@@ -424,7 +367,7 @@ export default function FestivalPOS() {
   };
 
   const deleteProduct = async (id) => {
-    if(!confirm('削除しますか？')) return;
+    if(!window.confirm('削除しますか？')) return;
     setIsMenuSyncing(true);
     setMenuItems(prev => prev.filter(i => i.id !== id));
     if (gasUrl && navigator.onLine && !isQueueMode) {
@@ -435,7 +378,14 @@ export default function FestivalPOS() {
 
   const exportCSV = () => {
     const headers = ['日時', '注文番号', '合計金額', '支払方法', '商品詳細', '担当者', '取消ステータス'];
-    const rows = salesHistory.map(s => [new Date(s.timestamp).toLocaleString(), s.orderNumber, s.total, s.paymentMethod === 'cash' ? '現金' : '食券', s.items.map(i => `${i.name}x${i.quantity}`).join('; '), s.staffName, s.isCanceled ? '取消済' : '']);
+    const rows = salesHistory.map(s => {
+      // トッピング情報を含めてCSVに出力
+      const itemsDetail = s.items.map(i => {
+        const topStr = (i.toppings && i.toppings.length) ? `(+${i.toppings.map(t=>t.name).join(',')})` : '';
+        return `${i.name}${topStr} x${i.quantity}`;
+      }).join('; ');
+      return [new Date(s.timestamp).toLocaleString(), s.orderNumber, s.total, s.paymentMethod === 'cash' ? '現金' : '食券', itemsDetail, s.staffName, s.isCanceled ? '取消済' : ''];
+    });
     const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
     const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `sales_${new Date().toISOString().slice(0,10)}.csv`; link.click();
@@ -452,10 +402,8 @@ export default function FestivalPOS() {
     } catch (e) { setConnectionStatus('error'); showToast("接続失敗", "error"); }
   };
 
-  const handleCopy = (text) => {
-    const ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.left = "-9999px";
-    document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); showToast('コピーしました', 'success'); } catch (e) {} document.body.removeChild(ta);
-  };
+  // カートのアイテム単価計算ユーティリティ
+  const getItemUnitPrice = (item) => item.price + (item.toppings?.reduce((s,t)=>s+t.price,0) || 0);
 
   // --- レイアウト ---
   return (
@@ -463,7 +411,7 @@ export default function FestivalPOS() {
       
       {/* 1. 左サイドバー */}
       <nav className="hidden md:flex w-16 bg-slate-900 flex-col items-center py-4 gap-6 shrink-0 z-50 shadow-xl">
-        <div className="text-white font-bold text-xs tracking-widest mb-2 writing-vertical-rl">POS</div>
+        <div className="text-white font-bold text-xs tracking-widest mb-2" style={{ writingMode: 'vertical-rl' }}>POS</div>
         {['register', 'history', 'closing', 'customer', 'menu', 'settings', 'help'].map(tab => (
           <button 
             key={tab} 
@@ -540,14 +488,37 @@ export default function FestivalPOS() {
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                     {menuItems.filter(i => selectedCategory === 'すべて' || i.category === selectedCategory).map(item => {
                       const isSoldOut = item.stock <= 0;
+                      const hasImage = Boolean(item.imageUrl);
+                      const hasTopping = item.toppings && item.toppings.length > 0;
+                      
                       return (
-                        <button key={item.id} onClick={() => addToCart(item)} disabled={isSoldOut} className={`relative flex flex-col justify-between p-4 rounded-xl border h-40 transition-all active:scale-[0.98] ${isSoldOut ? 'bg-gray-100 border-gray-200 opacity-60' : 'bg-white border-gray-200 shadow-sm hover:border-blue-400 hover:shadow-md'}`}>
-                          <div className="w-full text-left"><span className="font-bold text-lg text-slate-800 line-clamp-2 leading-snug">{item.name}</span></div>
-                          <div className="flex justify-between items-end w-full mt-auto">
-                            <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${item.stock <= 10 ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-500'}`}>残 {item.stock}</span>
-                            <span className="text-xl font-bold text-slate-900">¥{item.price}</span>
+                        <button 
+                          key={item.id} 
+                          onClick={() => handleItemClick(item)} 
+                          disabled={isSoldOut} 
+                          style={hasImage ? { backgroundImage: `url(${item.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}
+                          className={`relative flex flex-col justify-between p-4 rounded-xl border h-40 transition-all active:scale-[0.98] overflow-hidden shadow-sm ${isSoldOut ? 'opacity-60' : 'hover:border-blue-400 hover:shadow-md'} ${!hasImage ? 'bg-white border-gray-200' : 'border-transparent'}`}
+                        >
+                          {/* 背景画像用のオーバーレイ */}
+                          {hasImage && <div className="absolute inset-0 bg-black/40 z-0"></div>}
+                          
+                          <div className="w-full text-left relative z-10">
+                            <span className={`font-bold text-lg line-clamp-2 leading-snug drop-shadow-md ${hasImage ? 'text-white' : 'text-slate-800'}`}>
+                              {item.name}
+                            </span>
+                            {hasTopping && (
+                                <span className={`inline-flex items-center gap-1 mt-1 text-[10px] px-1.5 py-0.5 rounded font-bold ${hasImage ? 'bg-white/20 text-white backdrop-blur-sm' : 'bg-blue-50 text-blue-600'}`}>
+                                    <Layers size={10}/> トッピング
+                                </span>
+                            )}
                           </div>
-                          {isSoldOut && <div className="absolute inset-0 bg-white/50 flex items-center justify-center backdrop-blur-[1px] rounded-xl"><span className="bg-slate-800 text-white text-xs font-bold px-3 py-1 rounded">SOLD OUT</span></div>}
+                          
+                          <div className="flex justify-between items-end w-full mt-auto relative z-10">
+                            <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${item.stock <= 10 ? 'bg-red-500 text-white' : (hasImage ? 'bg-black/50 text-white backdrop-blur-sm' : 'bg-slate-100 text-slate-500')}`}>残 {item.stock}</span>
+                            <span className={`text-xl font-bold drop-shadow-md ${hasImage ? 'text-white' : 'text-slate-900'}`}>¥{item.price}</span>
+                          </div>
+                          
+                          {isSoldOut && <div className="absolute inset-0 bg-white/50 flex items-center justify-center backdrop-blur-[1px] z-20"><span className="bg-slate-800 text-white text-xs font-bold px-3 py-1 rounded">SOLD OUT</span></div>}
                         </button>
                       );
                     })}
@@ -565,11 +536,19 @@ export default function FestivalPOS() {
                 </div>
                 <div className="flex-1 overflow-y-auto p-2 space-y-1">
                   {cart.map((item, idx) => (
-                    <div key={idx} className="flex justify-between items-center p-3 bg-slate-50 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-colors group">
-                      <div className="flex-1 min-w-0"><div className="font-bold text-sm text-slate-800 truncate">{item.name}</div><div className="text-xs text-slate-500">¥{item.price}</div></div>
+                    <div key={item.cartId || idx} className="flex justify-between items-center p-3 bg-slate-50 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-colors group">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-bold text-sm text-slate-800 truncate">{item.name}</div>
+                        {item.toppings && item.toppings.length > 0 && (
+                            <div className="text-[10px] text-blue-600 mt-0.5 truncate flex flex-wrap gap-1">
+                                {item.toppings.map((t, i) => <span key={i} className="bg-blue-50 px-1 rounded">+{t.name}</span>)}
+                            </div>
+                        )}
+                        <div className="text-xs text-slate-500 mt-0.5">@¥{getItemUnitPrice(item)}</div>
+                      </div>
                       <div className="flex items-center gap-3 pl-2">
                         <div className="font-bold text-slate-700">x{item.quantity}</div>
-                        <div className="font-bold text-right w-16">¥{item.price * item.quantity}</div>
+                        <div className="font-bold text-right w-16">¥{getItemUnitPrice(item) * item.quantity}</div>
                         <button onClick={() => setCart(p => p.filter((_,i)=>i!==idx))} className="text-slate-300 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"><X size={16}/></button>
                       </div>
                     </div>
@@ -592,7 +571,7 @@ export default function FestivalPOS() {
             </div>
           )}
 
-          {/* === レジ締め画面 (New!) === */}
+          {/* === レジ締め画面 === */}
           {activeTab === 'closing' && (
             <div className="h-full overflow-y-auto p-6 bg-gray-50">
               <div className="max-w-3xl mx-auto space-y-6">
@@ -645,7 +624,7 @@ export default function FestivalPOS() {
                         <p>※ 「過不足」が0になるのが理想です。</p>
                       </div>
                       
-                      <button onClick={() => {if(confirm('レジ締めデータをリセットしますか？')) setCashCounts({})}} className="w-full py-3 border border-slate-300 rounded-lg text-slate-600 font-bold hover:bg-slate-50 flex items-center justify-center gap-2">
+                      <button onClick={() => {if(window.confirm('レジ締めデータをリセットしますか？')) setCashCounts({})}} className="w-full py-3 border border-slate-300 rounded-lg text-slate-600 font-bold hover:bg-slate-50 flex items-center justify-center gap-2">
                         <RotateCcw size={16}/> 入力をリセット
                       </button>
                     </div>
@@ -655,7 +634,7 @@ export default function FestivalPOS() {
             </div>
           )}
 
-          {/* === 客用ディスプレイ (New!) === */}
+          {/* === 客用ディスプレイ === */}
           {activeTab === 'customer' && (
             <div className="h-full flex flex-col items-center justify-center bg-slate-900 text-white p-8 text-center relative overflow-hidden">
               <div className="absolute top-4 left-4 text-xs opacity-50 flex items-center gap-2"><Wifi size={12}/> {navigator.onLine ? 'ローカル接続' : 'オフライン'}</div>
@@ -667,7 +646,7 @@ export default function FestivalPOS() {
               
               <div className="relative">
                 <div className="absolute inset-0 bg-blue-500 blur-3xl opacity-20 animate-pulse"></div>
-                <div className="text-[12rem] font-black leading-none tracking-tighter font-mono relative z-10 text-white text-shadow-lg">
+                <div className="text-[12rem] font-black leading-none tracking-tighter font-mono relative z-10 text-white" style={{ textShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
                   {String(displayOrderNumber).padStart(3, '0')}
                 </div>
               </div>
@@ -710,14 +689,33 @@ export default function FestivalPOS() {
             </div>
           )}
 
+          {/* === 商品マスタ管理 === */}
           {activeTab === 'menu' && (
             <div className="h-full overflow-y-auto p-6 bg-gray-50">
-              <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center"><h2 className="font-bold text-lg text-slate-700">商品マスタ管理</h2><button onClick={() => { setEditingProduct(null); setIsEditMenuModalOpen(true); }} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"><Plus size={16}/> 新規登録</button></div>
                 <div className="divide-y divide-slate-100">
                   {menuItems.map(item => (
                     <div key={item.id} className="p-4 flex items-center justify-between hover:bg-slate-50 group">
-                      <div><div className="flex items-center gap-2 mb-1"><span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-bold">{item.category}</span><span className="font-bold text-slate-800">{item.name}</span></div><div className="text-sm text-slate-500">¥{item.price} / 在庫: {item.stock}</div></div>
+                      <div className="flex items-center gap-4">
+                        {item.imageUrl ? (
+                            <div className="w-12 h-12 rounded-lg bg-slate-200 overflow-hidden shrink-0">
+                                <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                            </div>
+                        ) : (
+                            <div className="w-12 h-12 rounded-lg bg-slate-100 text-slate-300 flex items-center justify-center shrink-0 border border-slate-200">
+                                <ImageIcon size={20} />
+                            </div>
+                        )}
+                        <div>
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-bold">{item.category}</span>
+                                <span className="font-bold text-slate-800">{item.name}</span>
+                                {item.toppings && item.toppings.length > 0 && <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded flex items-center gap-1"><Layers size={10}/>トッピング有</span>}
+                            </div>
+                            <div className="text-sm text-slate-500">¥{item.price} / 在庫: {item.stock}</div>
+                        </div>
+                      </div>
                       <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => { setEditingProduct(item); setIsEditMenuModalOpen(true); }} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"><Edit3 size={18}/></button><button onClick={() => deleteProduct(item.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={18}/></button></div>
                     </div>
                   ))}
@@ -726,12 +724,12 @@ export default function FestivalPOS() {
             </div>
           )}
 
+          {/* === 設定タブ === */}
           {activeTab === 'settings' && (
             <div className="h-full overflow-y-auto p-6 bg-gray-50">
               <div className="max-w-md mx-auto bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6">
                 <h2 className="font-bold text-lg border-b pb-2">システム設定</h2>
                 
-                {/* 接続テスト */}
                 <div>
                   <label className="text-xs font-bold text-slate-500 block mb-2">GAS連携 URL</label>
                   <div className="flex gap-2 mb-2">
@@ -746,11 +744,12 @@ export default function FestivalPOS() {
 
                 <div><label className="text-xs font-bold text-slate-500 block mb-2">端末名</label><input type="text" value={deviceName} onChange={e=>setDeviceName(e.target.value)} className="w-full p-2 border rounded-lg bg-slate-50 font-bold text-slate-700" /></div>
                 
-                <div className="pt-4 border-t"><button onClick={() => { if(confirm('履歴を全て削除しますか？')) setSalesHistory([]); }} className="w-full py-3 text-red-600 font-bold border border-red-200 rounded-lg hover:bg-red-50 flex items-center justify-center gap-2"><RotateCcw size={18}/> 履歴リセット</button></div>
+                <div className="pt-4 border-t"><button onClick={() => { if(window.confirm('履歴を全て削除しますか？')) setSalesHistory([]); }} className="w-full py-3 text-red-600 font-bold border border-red-200 rounded-lg hover:bg-red-50 flex items-center justify-center gap-2"><RotateCcw size={18}/> 履歴リセット</button></div>
               </div>
             </div>
           )}
 
+          {/* === ヘルプタブ === */}
           {activeTab === 'help' && (
             <div className="h-full overflow-y-auto p-6 bg-gray-50">
               <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 p-8 text-slate-800">
@@ -758,37 +757,18 @@ export default function FestivalPOS() {
                 <div className="space-y-8">
                   <section>
                     <h3 className="text-lg font-bold mb-3 flex items-center gap-2"><span className="bg-slate-800 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">1</span>Googleスプレッドシートの準備</h3>
-                    <p className="text-sm text-slate-600 mb-2">以下の3つのシートを作成してください。</p>
+                    <p className="text-sm text-slate-600 mb-2">以下のシートを作成してください。</p>
                     <ol className="list-decimal list-inside text-sm space-y-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
                       <li className="space-y-2">
                         <div><strong><code>Menu</code> シートの1行目 (A1):</strong></div>
-                        <div className="flex items-center gap-2"><code className="bg-white border border-slate-300 px-2 py-1 rounded text-xs flex-1 overflow-x-auto whitespace-nowrap">ID	Category	Name	Price	Stock</code><button onClick={() => handleCopy("ID\tCategory\tName\tPrice\tStock", 'Menuヘッダーをコピーしました')} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-1 rounded text-xs flex items-center gap-1 shrink-0"><Copy size={12}/> コピー</button></div>
-                        <div className="text-[10px] text-slate-500 pl-4">※商品データサンプル: <button onClick={() => handleCopy(SAMPLE_DATA_TSV, 'サンプルデータをコピーしました')} className="text-blue-600 underline">コピー</button></div>
+                        <div className="flex items-center gap-2"><code className="bg-white border border-slate-300 px-2 py-1 rounded text-xs flex-1 overflow-x-auto whitespace-nowrap">ID	Category	Name	Price	Stock	ImageUrl	Toppings</code><button onClick={() => handleCopy("ID\tCategory\tName\tPrice\tStock\tImageUrl\tToppings", 'Menuヘッダーをコピーしました')} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-1 rounded text-xs flex items-center gap-1 shrink-0"><Copy size={12}/> コピー</button></div>
+                        <div className="text-[10px] text-slate-500 pl-4">※画像URLとToppings列は本バージョンで新設された拡張項目です。</div>
                       </li>
                       <li className="space-y-2">
                         <div><strong><code>Sales</code> シートの1行目 (A1):</strong></div>
                         <div className="flex items-center gap-2"><code className="bg-white border border-slate-300 px-2 py-1 rounded text-xs flex-1 overflow-x-auto whitespace-nowrap">Date	Total	Items	PaymentMethod	Device	OrderNum	Staff</code><button onClick={() => handleCopy("Date\tTotal\tItems\tPaymentMethod\tDevice\tOrderNum\tStaff", 'Salesヘッダーをコピーしました')} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-1 rounded text-xs flex items-center gap-1 shrink-0"><Copy size={12}/> コピー</button></div>
                       </li>
-                      <li className="space-y-2">
-                        <div className="font-bold text-blue-600">New! <code>Staff</code> シートの1行目 (A1):</div>
-                        <div className="flex items-center gap-2"><code className="bg-white border border-slate-300 px-2 py-1 rounded text-xs flex-1 overflow-x-auto whitespace-nowrap">Name	Shift	Role</code><button onClick={() => handleCopy("Name\tShift\tRole", 'Staffヘッダーをコピーしました')} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-1 rounded text-xs flex items-center gap-1 shrink-0"><Copy size={12}/> コピー</button></div>
-                        <div className="text-[10px] text-slate-500 pl-4">※スタッフデータサンプル: <button onClick={() => handleCopy(SAMPLE_STAFF_TSV, 'サンプルデータをコピーしました')} className="text-blue-600 underline">コピー</button></div>
-                      </li>
                     </ol>
-                  </section>
-                  <section>
-                    <h3 className="text-lg font-bold mb-3 flex items-center gap-2"><span className="bg-slate-800 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">2</span>スクリプト (GAS) の設定</h3>
-                    <div className="text-sm space-y-2 mb-4"><p>スプレッドシートのメニューから <strong>「拡張機能」 &gt; 「Apps Script」</strong> を開き、コードを貼り付けます。</p></div>
-                    <div className="relative group"><pre className="bg-slate-900 text-slate-100 p-4 rounded-lg text-xs font-mono overflow-x-auto h-48">{GAS_CODE_TEMPLATE}</pre><button onClick={() => handleCopy(GAS_CODE_TEMPLATE, 'コードをコピーしました')} className="absolute top-2 right-2 bg-white/10 hover:bg-white/20 text-white p-1 rounded flex items-center gap-1 text-xs"><Copy size={12}/> コピー</button></div>
-                  </section>
-                  <section>
-                    <h3 className="text-lg font-bold mb-3 flex items-center gap-2"><span className="bg-slate-800 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">3</span>デプロイと接続</h3>
-                    <ul className="list-disc list-inside text-sm space-y-2 bg-blue-50 p-4 rounded-lg border border-blue-100 text-blue-900">
-                      <li>Apps Script画面の右上 <strong>「デプロイ」 &gt; 「新しいデプロイ」</strong> をクリック。</li>
-                      <li>種類の選択（歯車アイコン）で <strong>「ウェブアプリ」</strong> を選択。</li>
-                      <li>アクセスできるユーザーを <strong>「全員 (Anyone)」</strong> に設定して「デプロイ」。</li>
-                      <li>発行された <strong>ウェブアプリURL</strong> をコピーし、このアプリの「設定」タブに貼り付けます。</li>
-                    </ul>
                   </section>
                 </div>
               </div>
@@ -797,6 +777,7 @@ export default function FestivalPOS() {
         </div>
       </div>
 
+      {/* ボトムナビゲーション (モバイル用) */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-slate-900 flex justify-around items-center z-50 shadow-[0_-4px_10px_rgba(0,0,0,0.3)]">
         {['register', 'history', 'closing', 'customer', 'menu', 'settings', 'help'].map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)} className={`flex flex-col items-center justify-center w-full h-full transition-colors ${activeTab===tab ? 'text-white bg-slate-800 border-t-2 border-blue-500' : 'text-slate-400 hover:text-white'}`}>
@@ -805,6 +786,58 @@ export default function FestivalPOS() {
           </button>
         ))}
       </nav>
+
+      {/* トッピング選択モーダル */}
+      {toppingModalItem && (
+        <div className="fixed inset-0 bg-slate-900/60 z-[85] flex items-end md:items-center justify-center p-0 md:p-4 animate-in fade-in">
+          <div className="bg-white w-full md:max-w-md rounded-t-2xl md:rounded-2xl shadow-2xl flex flex-col max-h-[85vh] animate-in slide-in-from-bottom-4 md:slide-in-from-bottom-0 md:zoom-in-95">
+            <div className="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-2xl md:rounded-t-2xl">
+              <div>
+                <h3 className="font-bold text-lg text-slate-800">{toppingModalItem.name}</h3>
+                <p className="text-xs text-slate-500">トッピングを選択してください</p>
+              </div>
+              <button onClick={() => setToppingModalItem(null)} className="p-2 hover:bg-slate-200 rounded-full"><X size={24}/></button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {toppingModalItem.toppings.map((topping, idx) => {
+                const isSelected = selectedToppings.find(t => t.name === topping.name);
+                return (
+                  <button 
+                    key={idx}
+                    onClick={() => toggleTopping(topping)}
+                    className={`w-full flex justify-between items-center p-4 rounded-xl border-2 transition-all active:scale-[0.98] ${isSelected ? 'border-blue-500 bg-blue-50/50' : 'border-slate-200 hover:border-slate-300 bg-white'}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-6 h-6 rounded-md flex items-center justify-center border transition-colors ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300 bg-white'}`}>
+                        {isSelected && <Check size={16} strokeWidth={3} />}
+                      </div>
+                      <span className="font-bold text-slate-700">{topping.name}</span>
+                    </div>
+                    <span className="font-bold text-slate-900">{topping.price > 0 ? `+¥${topping.price}` : '無料'}</span>
+                  </button>
+                );
+              })}
+            </div>
+            
+            <div className="p-4 border-t border-slate-100 bg-white md:rounded-b-2xl shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
+              <div className="flex justify-between items-end mb-4">
+                <span className="text-sm font-bold text-slate-500">追加料金: ¥{selectedToppings.reduce((sum, t) => sum + t.price, 0)}</span>
+                <div className="text-right">
+                  <span className="text-xs text-slate-400 block">小計</span>
+                  <span className="text-3xl font-bold text-slate-800 tracking-tight">¥{toppingModalItem.price + selectedToppings.reduce((sum, t) => sum + t.price, 0)}</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => executeAddToCart(toppingModalItem, selectedToppings, false)} 
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white text-lg font-bold py-4 rounded-xl shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              >
+                <ShoppingCart size={20}/> カートに追加
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 会計モーダル */}
       {isCheckoutModalOpen && (
@@ -858,15 +891,50 @@ export default function FestivalPOS() {
         </div>
       )}
 
-      {/* その他モーダル */}
+      {/* 商品追加・編集モーダル */}
       {isEditMenuModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 z-[90] flex items-center justify-center p-4">
-          <form onSubmit={(e) => { e.preventDefault(); const fd = new FormData(e.target); saveProduct({ id: editingProduct ? editingProduct.id : null, name: fd.get('name'), price: Number(fd.get('price')), stock: Number(fd.get('stock')), category: fd.get('category'), initialStock: Number(fd.get('stock')) }); }} className="bg-white w-full max-w-sm rounded-xl p-6 shadow-xl space-y-4 animate-in fade-in zoom-in-95">
-            <h3 className="font-bold text-lg text-slate-700">{editingProduct ? '商品編集' : '商品追加'}</h3>
-            <div><label className="text-xs font-bold text-slate-400">商品名</label><input name="name" defaultValue={editingProduct?.name} required className="w-full p-2 border rounded" /></div>
-            <div className="grid grid-cols-2 gap-4"><div><label className="text-xs font-bold text-slate-400">価格</label><input name="price" type="number" defaultValue={editingProduct?.price} required className="w-full p-2 border rounded" /></div><div><label className="text-xs font-bold text-slate-400">在庫</label><input name="stock" type="number" defaultValue={editingProduct?.stock} required className="w-full p-2 border rounded" /></div></div>
-            <div><label className="text-xs font-bold text-slate-400">カテゴリ</label><select name="category" defaultValue={editingProduct?.category||'その他'} className="w-full p-2 border rounded">{CATEGORIES_LIST.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
-            <div className="flex gap-2 pt-2"><button type="button" onClick={() => setIsEditMenuModalOpen(false)} className="flex-1 py-2 border rounded text-slate-500 hover:bg-slate-50">キャンセル</button><button type="submit" disabled={isMenuSyncing} className="flex-1 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 flex items-center justify-center gap-2">{isMenuSyncing ? <Loader2 size={16} className="animate-spin"/> : '保存'}</button></div>
+        <div className="fixed inset-0 bg-slate-900/50 z-[90] flex items-center justify-center p-4 backdrop-blur-sm">
+          <form onSubmit={(e) => { 
+            e.preventDefault(); 
+            const fd = new FormData(e.target); 
+            saveProduct({ 
+              id: editingProduct ? editingProduct.id : null, 
+              name: fd.get('name'), 
+              price: Number(fd.get('price')), 
+              stock: Number(fd.get('stock')), 
+              category: fd.get('category'), 
+              initialStock: Number(fd.get('stock')),
+              imageUrl: fd.get('imageUrl'),
+              toppings: parseToppings(fd.get('toppings'))
+            }); 
+          }} className="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <h3 className="font-bold text-xl text-slate-800 border-b pb-2">{editingProduct ? '商品情報を編集' : '新しい商品を追加'}</h3>
+            
+            <div><label className="text-xs font-bold text-slate-500 mb-1 block">商品名</label><input name="name" defaultValue={editingProduct?.name} required className="w-full p-2.5 border border-slate-300 rounded-lg bg-slate-50" placeholder="例: 唐揚げ" /></div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div><label className="text-xs font-bold text-slate-500 mb-1 block">販売価格 (¥)</label><input name="price" type="number" defaultValue={editingProduct?.price} required className="w-full p-2.5 border border-slate-300 rounded-lg bg-slate-50" /></div>
+              <div><label className="text-xs font-bold text-slate-500 mb-1 block">初期在庫</label><input name="stock" type="number" defaultValue={editingProduct?.stock} required className="w-full p-2.5 border border-slate-300 rounded-lg bg-slate-50" /></div>
+            </div>
+            
+            <div><label className="text-xs font-bold text-slate-500 mb-1 block">カテゴリ</label><select name="category" defaultValue={editingProduct?.category||'その他'} className="w-full p-2.5 border border-slate-300 rounded-lg bg-slate-50">{CATEGORIES_LIST.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
+            
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
+                <div>
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1 mb-1"><ImageIcon size={14}/> 背景画像URL (任意)</label>
+                    <input name="imageUrl" defaultValue={editingProduct?.imageUrl} className="w-full p-2 text-sm border border-slate-300 rounded bg-white" placeholder="https://..." />
+                </div>
+                <div>
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1 mb-1"><Layers size={14}/> トッピング設定 (任意)</label>
+                    <input name="toppings" defaultValue={stringifyToppings(editingProduct?.toppings)} className="w-full p-2 text-sm border border-slate-300 rounded bg-white" placeholder="例: チーズ:50, 大盛り:100" />
+                    <p className="text-[10px] text-slate-400 mt-1">※ カンマ区切りで「名称:追加料金」を入力（無料の場合は0）。</p>
+                </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={() => setIsEditMenuModalOpen(false)} className="flex-1 py-3 border border-slate-300 rounded-lg text-slate-600 font-bold hover:bg-slate-50">キャンセル</button>
+              <button type="submit" disabled={isMenuSyncing} className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 flex items-center justify-center gap-2 shadow-md">{isMenuSyncing ? <Loader2 size={18} className="animate-spin"/> : '保存する'}</button>
+            </div>
           </form>
         </div>
       )}
@@ -876,7 +944,7 @@ export default function FestivalPOS() {
           <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-xl animate-in fade-in zoom-in-95">
             <div className="flex justify-between items-center mb-6"><h3 className="font-bold text-slate-700">金額入力</h3><button onClick={()=>setIsCalculatorOpen(false)}><X/></button></div>
             <div className="bg-slate-100 p-4 rounded-xl text-right text-4xl font-bold text-slate-800 mb-6 font-mono">¥{customPriceInput||'0'}</div>
-            <div className="h-80"><NumPad onInput={(v)=>{if(customPriceInput.length<6)setCustomPriceInput(p=>p+v)}} onClear={()=>setCustomPriceInput('')} onEnter={()=>{ const p = parseInt(customPriceInput); if(p){ addToCart({id:`c-${Date.now()}`, name:'金額入力', price:p, category:'その他', stock:999}, true); setCustomPriceInput(''); setIsCalculatorOpen(false); } }} canSubmit={customPriceInput.length>0} submitLabel="追加" /></div>
+            <div className="h-80"><NumPad onInput={(v)=>{if(customPriceInput.length<6)setCustomPriceInput(p=>p+v)}} onClear={()=>setCustomPriceInput('')} onEnter={()=>{ const p = parseInt(customPriceInput); if(p){ executeAddToCart({id:`c-${Date.now()}`, name:'金額入力', price:p, category:'その他', stock:999}, [], true); setCustomPriceInput(''); setIsCalculatorOpen(false); } }} canSubmit={customPriceInput.length>0} submitLabel="追加" /></div>
           </div>
         </div>
       )}
