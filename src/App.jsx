@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
   ShoppingCart, Settings, RefreshCw, CheckCircle, BarChart3, 
   X, Edit3, Trash2, ChevronRight, Calculator, Wifi, 
@@ -41,6 +41,24 @@ const CASH_DENOMINATIONS = [
 ];
 
 // --- Utils ---
+const resizeImage = (file, maxWidth = 400, quality = 0.82) =>
+  new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const ratio = Math.min(1, maxWidth / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * ratio);
+        canvas.height = Math.round(img.height * ratio);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
 const playSound = (type) => {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -131,6 +149,10 @@ export default function App() {
   const [toppingModalItem, setToppingModalItem] = useState(null);
   const [selectedToppings, setSelectedToppings] = useState([]);
 
+  // 商品画像編集用ステート
+  const [editImageUrl, setEditImageUrl] = useState('');
+  const fileInputRef = useRef(null);
+
   // Payment
   const [deposit, setDeposit] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
@@ -142,6 +164,18 @@ export default function App() {
 
   const showToast = (message, type = 'info') => setToast({ message, type });
   const play = (type) => playSound(type);
+
+  const handleImageFileChange = useCallback(async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await resizeImage(file);
+      setEditImageUrl(dataUrl);
+    } catch {
+      showToast('画像の読み込みに失敗しました', 'error');
+    }
+    e.target.value = '';
+  }, []);
 
   // Load/Save LocalStorage
   useEffect(() => {
@@ -693,7 +727,7 @@ export default function App() {
           {activeTab === 'menu' && (
             <div className="h-full overflow-y-auto p-6 bg-gray-50">
               <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center"><h2 className="font-bold text-lg text-slate-700">商品マスタ管理</h2><button onClick={() => { setEditingProduct(null); setIsEditMenuModalOpen(true); }} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"><Plus size={16}/> 新規登録</button></div>
+                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center"><h2 className="font-bold text-lg text-slate-700">商品マスタ管理</h2><button onClick={() => { setEditingProduct(null); setEditImageUrl(''); setIsEditMenuModalOpen(true); }} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2"><Plus size={16}/> 新規登録</button></div>
                 <div className="divide-y divide-slate-100">
                   {menuItems.map(item => (
                     <div key={item.id} className="p-4 flex items-center justify-between hover:bg-slate-50 group">
@@ -716,7 +750,7 @@ export default function App() {
                             <div className="text-sm text-slate-500">¥{item.price} / 在庫: {item.stock}</div>
                         </div>
                       </div>
-                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => { setEditingProduct(item); setIsEditMenuModalOpen(true); }} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"><Edit3 size={18}/></button><button onClick={() => deleteProduct(item.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={18}/></button></div>
+                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => { setEditingProduct(item); setEditImageUrl(item.imageUrl || ''); setIsEditMenuModalOpen(true); }} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"><Edit3 size={18}/></button><button onClick={() => deleteProduct(item.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={18}/></button></div>
                     </div>
                   ))}
                 </div>
@@ -897,16 +931,16 @@ export default function App() {
           <form onSubmit={(e) => { 
             e.preventDefault(); 
             const fd = new FormData(e.target); 
-            saveProduct({ 
-              id: editingProduct ? editingProduct.id : null, 
-              name: fd.get('name'), 
-              price: Number(fd.get('price')), 
-              stock: Number(fd.get('stock')), 
-              category: fd.get('category'), 
+            saveProduct({
+              id: editingProduct ? editingProduct.id : null,
+              name: fd.get('name'),
+              price: Number(fd.get('price')),
+              stock: Number(fd.get('stock')),
+              category: fd.get('category'),
               initialStock: Number(fd.get('stock')),
-              imageUrl: fd.get('imageUrl'),
+              imageUrl: editImageUrl,
               toppings: parseToppings(fd.get('toppings'))
-            }); 
+            });
           }} className="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
             <h3 className="font-bold text-xl text-slate-800 border-b pb-2">{editingProduct ? '商品情報を編集' : '新しい商品を追加'}</h3>
             
@@ -921,8 +955,38 @@ export default function App() {
             
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
                 <div>
-                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1 mb-1"><ImageIcon size={14}/> 背景画像URL (任意)</label>
-                    <input name="imageUrl" defaultValue={editingProduct?.imageUrl} className="w-full p-2 text-sm border border-slate-300 rounded bg-white" placeholder="https://..." />
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1 mb-2"><ImageIcon size={14}/> 商品画像 (任意)</label>
+
+                    {/* プレビュー */}
+                    {editImageUrl && (
+                        <div className="relative mb-2 w-full h-36 rounded-lg overflow-hidden bg-slate-200">
+                            <img src={editImageUrl} alt="プレビュー" className="w-full h-full object-cover" />
+                            <button
+                                type="button"
+                                onClick={() => setEditImageUrl('')}
+                                className="absolute top-1.5 right-1.5 bg-black/60 hover:bg-black/80 text-white rounded-full p-1 transition-colors"
+                            ><X size={14}/></button>
+                        </div>
+                    )}
+
+                    {/* ファイル選択ボタン */}
+                    <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-full mb-2 py-2.5 border-2 border-dashed border-slate-300 rounded-lg text-slate-500 text-sm hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/50 flex items-center justify-center gap-2 transition-colors"
+                    >
+                        <ImageIcon size={16}/> 端末から画像を選択
+                    </button>
+                    <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageFileChange} className="hidden" />
+
+                    {/* URL入力 */}
+                    <input
+                        value={editImageUrl}
+                        onChange={e => setEditImageUrl(e.target.value)}
+                        className="w-full p-2 text-sm border border-slate-300 rounded bg-white"
+                        placeholder="または画像URLを入力 https://..."
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">※ 端末からアップロードするか、外部の画像URLを入力できます。</p>
                 </div>
                 <div>
                     <label className="text-xs font-bold text-slate-700 flex items-center gap-1 mb-1"><Layers size={14}/> トッピング設定 (任意)</label>
