@@ -106,18 +106,20 @@ const stringifyToppings = (toppings) => {
 };
 
 // --- Main Component ---
+const loadLS = (key, fallback) => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; } };
+
 export default function App() {
-  
+
   // App States
   const [activeTab, setActiveTab] = useState('register');
-  const [gasUrl, setGasUrl] = useState('');
-  const [deviceName, setDeviceName] = useState('レジ01');
-  const [staffName, setStaffName] = useState('未設定');
-  const [salesTarget, setSalesTarget] = useState(50000);
-  
+  const [gasUrl, setGasUrl] = useState(() => localStorage.getItem('bunka_gas_url') || '');
+  const [deviceName, setDeviceName] = useState(() => localStorage.getItem('bunka_device') || 'レジ01');
+  const [staffName, setStaffName] = useState(() => localStorage.getItem('bunka_staff_name') || '未設定');
+  const [salesTarget, setSalesTarget] = useState(() => { const v = localStorage.getItem('bunka_sales_target'); return v ? Number(v) : 50000; });
+
   // Queue & Sync Mode
-  const [isQueueMode, setIsQueueMode] = useState(false);
-  
+  const [isQueueMode, setIsQueueMode] = useState(() => loadLS('bunka_queue_mode', false));
+
   // Sync Status
   const [isMenuSyncing, setIsMenuSyncing] = useState(false);
   const [isHistorySyncing, setIsHistorySyncing] = useState(false);
@@ -125,13 +127,13 @@ export default function App() {
   const [isSendingQueue, setIsSendingQueue] = useState(false);
 
   // Data
-  const [menuItems, setMenuItems] = useState(INITIAL_MENU);
-  const [staffList, setStaffList] = useState(INITIAL_STAFF); 
+  const [menuItems, setMenuItems] = useState(() => loadLS('bunka_menu', INITIAL_MENU));
+  const [staffList, setStaffList] = useState(() => loadLS('bunka_staff', INITIAL_STAFF));
   const [cart, setCart] = useState([]);
-  const [salesHistory, setSalesHistory] = useState([]);
-  const [unsentOrders, setUnsentOrders] = useState([]);
-  const [orderNumber, setOrderNumber] = useState(1);
-  const [displayOrderNumber, setDisplayOrderNumber] = useState(1); // 共有ディスプレイ用
+  const [salesHistory, setSalesHistory] = useState(() => loadLS('bunka_history', []));
+  const [unsentOrders, setUnsentOrders] = useState(() => loadLS('bunka_unsent', []));
+  const [orderNumber, setOrderNumber] = useState(() => loadLS('bunka_order_num', 1));
+  const [displayOrderNumber, setDisplayOrderNumber] = useState(() => loadLS('bunka_display_num', 1));
   
   // UI
   const [selectedCategory, setSelectedCategory] = useState('すべて');
@@ -160,7 +162,7 @@ export default function App() {
   const [connectionStatus, setConnectionStatus] = useState('unknown');
 
   // Closing (レジ締め)
-  const [cashCounts, setCashCounts] = useState({});
+  const [cashCounts, setCashCounts] = useState(() => loadLS('bunka_cash_counts', {}));
 
   const showToast = (message, type = 'info') => setToast({ message, type });
   const play = (type) => playSound(type);
@@ -179,25 +181,6 @@ export default function App() {
       showToast('画像の読み込みに失敗しました', 'error');
     }
     e.target.value = '';
-  }, []);
-
-  // Load/Save LocalStorage
-  useEffect(() => {
-    const load = (key, setter) => { const v = localStorage.getItem(key); if(v) setter(JSON.parse(v)); };
-    load('bunka_menu', setMenuItems);
-    load('bunka_staff', setStaffList);
-    load('bunka_history', setSalesHistory);
-    load('bunka_unsent', setUnsentOrders);
-    load('bunka_order_num', setOrderNumber);
-    load('bunka_queue_mode', setIsQueueMode);
-    load('bunka_cash_counts', setCashCounts); // レジ締めデータ
-    load('bunka_display_num', setDisplayOrderNumber);
-    
-    // 設定関連
-    const savedDev = localStorage.getItem('bunka_device'); if(savedDev) setDeviceName(savedDev);
-    const savedStaff = localStorage.getItem('bunka_staff_name'); if(savedStaff) setStaffName(savedStaff);
-    const savedGasUrl = localStorage.getItem('bunka_gas_url'); if(savedGasUrl) setGasUrl(savedGasUrl);
-    const savedTarget = localStorage.getItem('bunka_sales_target'); if(savedTarget) setSalesTarget(Number(savedTarget));
   }, []);
 
   // Persist State to LocalStorage
