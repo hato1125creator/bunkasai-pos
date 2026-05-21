@@ -245,20 +245,22 @@ export default function App() {
         setMenuItems(prev => {
           const localMap = new Map(prev.map(i => [i.id, i]));
           const gasMap = new Map(dataMenu.items.map(i => [i.id, i]));
-          // 既存ローカル商品をGASデータで更新
+          // 既存ローカル商品をGASデータで更新し、GAS管理フラグを付与
           const updated = prev.map(p => {
-            if (!gasMap.has(p.id)) return p;
+            if (!gasMap.has(p.id)) return p; // GASにない → ローカル専用としてそのまま維持
             const g = gasMap.get(p.id);
             return {
               ...p, ...g,
               imageUrl: g.imageUrl || p.imageUrl,
               toppings: (g.toppings && g.toppings.length) ? g.toppings : p.toppings,
-              initialStock: p.initialStock, // ローカルの初期在庫を維持
+              initialStock: p.initialStock,
+              gasManaged: true,
             };
           });
-          // GASにあってローカルにない商品を追加
-          const newFromGas = dataMenu.items.filter(g => !localMap.has(g.id));
-          return [...updated, ...newFromGas];
+          // GASにあってローカルにない商品を追加（GAS管理フラグ付き）
+          const newFromGas = dataMenu.items.filter(g => !localMap.has(g.id)).map(g => ({ ...g, gasManaged: true }));
+          // GAS管理商品でスプシから行が消えたものを削除
+          return [...updated, ...newFromGas].filter(p => !p.gasManaged || gasMap.has(p.id));
         });
       }
       const resStaff = await fetch(`${gasUrl}?action=getStaff`);
@@ -391,14 +393,34 @@ export default function App() {
 
   const saveProduct = async (product) => {
     setIsMenuSyncing(true);
+    let finalProduct = { ...product };
+
+    // base64画像 → GAS経由でGoogle Driveにアップロード
+    if (product.imageUrl?.startsWith('data:') && gasUrl && navigator.onLine) {
+      try {
+        const base64 = product.imageUrl.split(',')[1];
+        const mimeType = product.imageUrl.match(/data:([^;]+)/)?.[1] || 'image/jpeg';
+        const uploadRes = await fetch(gasUrl, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'uploadImage', base64, mimeType, filename: `product_${product.id || Date.now()}.jpg` })
+        });
+        const uploadData = await uploadRes.json();
+        if (uploadData.url) {
+          finalProduct.imageUrl = uploadData.url;
+          setEditImageUrl(uploadData.url); // プレビューをDriveのURLに差し替え
+        }
+      } catch(e) {
+        // アップロード失敗 → base64のままローカル保存
+      }
+    }
+
     if (editingProduct) {
-      setMenuItems(prev => prev.map(i => i.id === product.id ? product : i));
+      setMenuItems(prev => prev.map(i => i.id === finalProduct.id ? finalProduct : i));
     } else {
-      setMenuItems(prev => [...prev, { ...product, id: `m-${Date.now()}`, initialStock: product.stock }]);
+      setMenuItems(prev => [...prev, { ...finalProduct, id: `m-${Date.now()}`, initialStock: finalProduct.stock }]);
     }
     if (gasUrl && navigator.onLine && !isQueueMode) {
-      // base64画像はGASに送らない（サイズ超過防止）
-      const productForGas = { ...product, imageUrl: product.imageUrl?.startsWith('data:') ? '' : (product.imageUrl || '') };
+      const productForGas = { ...finalProduct, imageUrl: finalProduct.imageUrl?.startsWith('data:') ? '' : (finalProduct.imageUrl || '') };
       try {
         await fetch(gasUrl, { method: 'POST', body: JSON.stringify({ action: 'updateProduct', product: productForGas }) });
         showToast('保存しました（クラウド同期済）', 'success');
@@ -828,7 +850,7 @@ export default function App() {
                     <p className="text-sm text-slate-600 mb-3">スプレッドシートの「拡張機能」→「Apps Script」を開き、以下のコードを貼り付けて「デプロイ」してください。</p>
                     <div className="relative bg-slate-900 rounded-lg overflow-hidden">
                       <button onClick={() => handleCopy(`function doGet(e){const a=e.parameter.action,ss=SpreadsheetApp.getActiveSpreadsheet();if(a==='getMenu'){const sh=ss.getSheetByName('Menu'),d=sh.getDataRange().getValues(),items=d.slice(1).filter(r=>r[0]).map(r=>({id:r[0],category:r[1],name:r[2],price:Number(r[3]),stock:Number(r[4]),initialStock:Number(r[4]),imageUrl:r[5]||'',toppings:parseToppings(r[6]||'')}));return res({items})}if(a==='getStaff'){const sh=ss.getSheetByName('Staff');if(!sh)return res({staff:[]});const d=sh.getDataRange().getValues(),staff=d.slice(1).filter(r=>r[0]).map(r=>({name:r[0],shift:r[1]||'',role:r[2]||''}));return res({staff})}if(a==='getSales'){const sh=ss.getSheetByName('Sales');if(!sh)return res({sales:[]});const d=sh.getDataRange().getValues(),lim=Number(e.parameter.limit)||50,sales=d.slice(1).filter(r=>r[0]).slice(-lim).reverse().map(r=>({timestamp:r[0],total:r[1],items:JSON.parse(r[2]||'[]'),paymentMethod:r[3],deviceId:r[4],orderNumber:r[5],staffName:r[6],isCanceled:r[7]||false}));return res({sales})}if(a==='ping')return res({status:'success'});return res({status:'error'})}
-function doPost(e){const data=JSON.parse(e.postData.contents),ss=SpreadsheetApp.getActiveSpreadsheet();if(data.action==='updateProduct'){const sh=ss.getSheetByName('Menu'),d=sh.getDataRange().getValues();for(let i=1;i<d.length;i++){if(d[i][0]==data.product.id){sh.getRange(i+1,1,1,7).setValues([[data.product.id,data.product.category,data.product.name,data.product.price,data.product.stock,data.product.imageUrl||'',strToppings(data.product.toppings||[])]]);return res({status:'success'})}}sh.appendRow([data.product.id,data.product.category,data.product.name,data.product.price,data.product.stock,data.product.imageUrl||'',strToppings(data.product.toppings||[])]);return res({status:'success'})}if(data.action==='deleteProduct'){const sh=ss.getSheetByName('Menu'),d=sh.getDataRange().getValues();for(let i=1;i<d.length;i++){if(d[i][0]==data.id){sh.deleteRow(i+1);return res({status:'success'})}}return res({status:'success'})}const sh=ss.getSheetByName('Sales')||ss.insertSheet('Sales');if(sh.getLastRow()===0)sh.appendRow(['Date','Total','Items','PaymentMethod','Device','OrderNum','Staff','Canceled']);sh.appendRow([data.timestamp,data.total,JSON.stringify(data.items),data.paymentMethod,data.deviceId,data.orderNumber,data.staffName,data.isCanceled||false]);return res({status:'success'})}
+function doPost(e){const data=JSON.parse(e.postData.contents),ss=SpreadsheetApp.getActiveSpreadsheet();if(data.action==='uploadImage'){const decoded=Utilities.base64Decode(data.base64),blob=Utilities.newBlob(decoded,data.mimeType||'image/jpeg',data.filename||'product.jpg'),folders=DriveApp.getFoldersByName('BunkasaiPOS_Images'),folder=folders.hasNext()?folders.next():DriveApp.createFolder('BunkasaiPOS_Images'),file=folder.createFile(blob);file.setSharing(DriveApp.Access.ANYONE_WITH_LINK,DriveApp.Permission.VIEW);return res({status:'success',url:'https://drive.google.com/thumbnail?id='+file.getId()+'&sz=w400'})}if(data.action==='updateProduct'){const sh=ss.getSheetByName('Menu'),d=sh.getDataRange().getValues();for(let i=1;i<d.length;i++){if(d[i][0]==data.product.id){sh.getRange(i+1,1,1,7).setValues([[data.product.id,data.product.category,data.product.name,data.product.price,data.product.stock,data.product.imageUrl||'',strToppings(data.product.toppings||[])]]);return res({status:'success'})}}sh.appendRow([data.product.id,data.product.category,data.product.name,data.product.price,data.product.stock,data.product.imageUrl||'',strToppings(data.product.toppings||[])]);return res({status:'success'})}if(data.action==='deleteProduct'){const sh=ss.getSheetByName('Menu'),d=sh.getDataRange().getValues();for(let i=1;i<d.length;i++){if(d[i][0]==data.id){sh.deleteRow(i+1);return res({status:'success'})}}return res({status:'success'})}const sh=ss.getSheetByName('Sales')||ss.insertSheet('Sales');if(sh.getLastRow()===0)sh.appendRow(['Date','Total','Items','PaymentMethod','Device','OrderNum','Staff','Canceled']);sh.appendRow([data.timestamp,data.total,JSON.stringify(data.items),data.paymentMethod,data.deviceId,data.orderNumber,data.staffName,data.isCanceled||false]);return res({status:'success'})}
 function parseToppings(s){if(!s)return[];return s.split(',').map(t=>{const p=t.trim().split(':');return p.length>=2?{name:p[0].trim(),price:parseInt(p[1])||0}:null}).filter(t=>t&&t.name)}
 function strToppings(t){return t&&t.length?t.map(x=>x.name+':'+x.price).join(', '):''}
 function res(d){return ContentService.createTextOutput(JSON.stringify(d)).setMimeType(ContentService.MimeType.JSON)}`, 'GASスクリプトをコピーしました')} className="absolute top-2 right-2 bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded text-xs flex items-center gap-1 z-10"><Copy size={12}/> コピー</button>
@@ -841,8 +863,7 @@ function res(d){return ContentService.createTextOutput(JSON.stringify(d)).setMim
       .filter(r => r[0]).map(r => ({
         id: r[0], category: r[1], name: r[2],
         price: Number(r[3]), stock: Number(r[4]), initialStock: Number(r[4]),
-        imageUrl: r[5] || '',        // ← ImageUrl列
-        toppings: parseToppings(r[6] || '')
+        imageUrl: r[5] || '', toppings: parseToppings(r[6] || '')
       }));
     return res({ items });
   }
@@ -869,6 +890,18 @@ function res(d){return ContentService.createTextOutput(JSON.stringify(d)).setMim
 function doPost(e) {
   const data = JSON.parse(e.postData.contents);
   const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // 端末からアップロードした画像をGoogle Driveに保存してURLを返す
+  if (data.action === 'uploadImage') {
+    const decoded = Utilities.base64Decode(data.base64);
+    const blob = Utilities.newBlob(decoded, data.mimeType || 'image/jpeg', data.filename || 'product.jpg');
+    const folders = DriveApp.getFoldersByName('BunkasaiPOS_Images');
+    const folder = folders.hasNext() ? folders.next() : DriveApp.createFolder('BunkasaiPOS_Images');
+    const file = folder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    return res({ status: 'success', url: 'https://drive.google.com/thumbnail?id=' + file.getId() + '&sz=w400' });
+  }
+
   if (data.action === 'updateProduct') {
     const sh = ss.getSheetByName('Menu');
     const rows = sh.getDataRange().getValues();
@@ -877,8 +910,7 @@ function doPost(e) {
         sh.getRange(i+1,1,1,7).setValues([[
           data.product.id, data.product.category, data.product.name,
           data.product.price, data.product.stock,
-          data.product.imageUrl || '',  // ← ImageUrl保存
-          strToppings(data.product.toppings||[])
+          data.product.imageUrl || '', strToppings(data.product.toppings||[])
         ]]);
         return res({ status: 'success' });
       }
@@ -915,7 +947,7 @@ function res(d) {
     .setMimeType(ContentService.MimeType.JSON);
 }`}</pre>
                     </div>
-                    <p className="text-xs text-slate-500 mt-2">※ デプロイ時は「アクセスできるユーザー：全員」に設定してください。</p>
+                    <p className="text-xs text-slate-500 mt-2">※ デプロイ時は「アクセスできるユーザー：全員」に設定してください。画像アップロードにはDriveへのアクセス権限が必要です（初回デプロイ時に許可を求められます）。</p>
                   </section>
                 </div>
               </div>
