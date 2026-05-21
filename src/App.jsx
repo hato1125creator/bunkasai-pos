@@ -240,10 +240,19 @@ export default function App() {
       const resMenu = await fetch(`${gasUrl}?action=getMenu`);
       const dataMenu = await resMenu.json();
       if (dataMenu.items) {
-        // GAS側からの同期でも既存のローカルデータ(画像やトッピング)を極力マージする
         setMenuItems(prev => {
           const newMap = new Map(dataMenu.items.map(i => [i.id, i]));
-          return prev.map(p => newMap.has(p.id) ? { ...p, ...newMap.get(p.id) } : p);
+          return prev.map(p => {
+            if (!newMap.has(p.id)) return p;
+            const g = newMap.get(p.id);
+            return {
+              ...p, ...g,
+              // スプシにURLがあれば優先、空なら端末のローカル画像を維持
+              imageUrl: g.imageUrl || p.imageUrl,
+              // スプシにトッピングがあれば優先、空なら端末設定を維持
+              toppings: (g.toppings && g.toppings.length) ? g.toppings : p.toppings,
+            };
+          });
         });
       }
       const resStaff = await fetch(`${gasUrl}?action=getStaff`);
@@ -783,13 +792,107 @@ export default function App() {
                       <li className="space-y-2">
                         <div><strong><code>Menu</code> シートの1行目 (A1):</strong></div>
                         <div className="flex items-center gap-2"><code className="bg-white border border-slate-300 px-2 py-1 rounded text-xs flex-1 overflow-x-auto whitespace-nowrap">ID	Category	Name	Price	Stock	ImageUrl	Toppings</code><button onClick={() => handleCopy("ID\tCategory\tName\tPrice\tStock\tImageUrl\tToppings", 'Menuヘッダーをコピーしました')} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-1 rounded text-xs flex items-center gap-1 shrink-0"><Copy size={12}/> コピー</button></div>
-                        <div className="text-[10px] text-slate-500 pl-4">※画像URLとToppings列は本バージョンで新設された拡張項目です。</div>
+                        <div className="text-[10px] text-slate-500 pl-4">※ ImageUrl列に画像のURLを入れると同期時に反映されます。空欄の場合は端末にアップロードした画像が維持されます。</div>
                       </li>
                       <li className="space-y-2">
                         <div><strong><code>Sales</code> シートの1行目 (A1):</strong></div>
                         <div className="flex items-center gap-2"><code className="bg-white border border-slate-300 px-2 py-1 rounded text-xs flex-1 overflow-x-auto whitespace-nowrap">Date	Total	Items	PaymentMethod	Device	OrderNum	Staff</code><button onClick={() => handleCopy("Date\tTotal\tItems\tPaymentMethod\tDevice\tOrderNum\tStaff", 'Salesヘッダーをコピーしました')} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-1 rounded text-xs flex items-center gap-1 shrink-0"><Copy size={12}/> コピー</button></div>
                       </li>
                     </ol>
+                  </section>
+                  <section>
+                    <h3 className="text-lg font-bold mb-3 flex items-center gap-2"><span className="bg-slate-800 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">2</span>Google Apps Script (GAS) の設定</h3>
+                    <p className="text-sm text-slate-600 mb-3">スプレッドシートの「拡張機能」→「Apps Script」を開き、以下のコードを貼り付けて「デプロイ」してください。</p>
+                    <div className="relative bg-slate-900 rounded-lg overflow-hidden">
+                      <button onClick={() => handleCopy(`function doGet(e){const a=e.parameter.action,ss=SpreadsheetApp.getActiveSpreadsheet();if(a==='getMenu'){const sh=ss.getSheetByName('Menu'),d=sh.getDataRange().getValues(),items=d.slice(1).filter(r=>r[0]).map(r=>({id:r[0],category:r[1],name:r[2],price:Number(r[3]),stock:Number(r[4]),initialStock:Number(r[4]),imageUrl:r[5]||'',toppings:parseToppings(r[6]||'')}));return res({items})}if(a==='getStaff'){const sh=ss.getSheetByName('Staff');if(!sh)return res({staff:[]});const d=sh.getDataRange().getValues(),staff=d.slice(1).filter(r=>r[0]).map(r=>({name:r[0],shift:r[1]||'',role:r[2]||''}));return res({staff})}if(a==='getSales'){const sh=ss.getSheetByName('Sales');if(!sh)return res({sales:[]});const d=sh.getDataRange().getValues(),lim=Number(e.parameter.limit)||50,sales=d.slice(1).filter(r=>r[0]).slice(-lim).reverse().map(r=>({timestamp:r[0],total:r[1],items:JSON.parse(r[2]||'[]'),paymentMethod:r[3],deviceId:r[4],orderNumber:r[5],staffName:r[6],isCanceled:r[7]||false}));return res({sales})}if(a==='ping')return res({status:'success'});return res({status:'error'})}
+function doPost(e){const data=JSON.parse(e.postData.contents),ss=SpreadsheetApp.getActiveSpreadsheet();if(data.action==='updateProduct'){const sh=ss.getSheetByName('Menu'),d=sh.getDataRange().getValues();for(let i=1;i<d.length;i++){if(d[i][0]==data.product.id){sh.getRange(i+1,1,1,7).setValues([[data.product.id,data.product.category,data.product.name,data.product.price,data.product.stock,data.product.imageUrl||'',strToppings(data.product.toppings||[])]]);return res({status:'success'})}}sh.appendRow([data.product.id,data.product.category,data.product.name,data.product.price,data.product.stock,data.product.imageUrl||'',strToppings(data.product.toppings||[])]);return res({status:'success'})}if(data.action==='deleteProduct'){const sh=ss.getSheetByName('Menu'),d=sh.getDataRange().getValues();for(let i=1;i<d.length;i++){if(d[i][0]==data.id){sh.deleteRow(i+1);return res({status:'success'})}}return res({status:'success'})}const sh=ss.getSheetByName('Sales')||ss.insertSheet('Sales');if(sh.getLastRow()===0)sh.appendRow(['Date','Total','Items','PaymentMethod','Device','OrderNum','Staff','Canceled']);sh.appendRow([data.timestamp,data.total,JSON.stringify(data.items),data.paymentMethod,data.deviceId,data.orderNumber,data.staffName,data.isCanceled||false]);return res({status:'success'})}
+function parseToppings(s){if(!s)return[];return s.split(',').map(t=>{const p=t.trim().split(':');return p.length>=2?{name:p[0].trim(),price:parseInt(p[1])||0}:null}).filter(t=>t&&t.name)}
+function strToppings(t){return t&&t.length?t.map(x=>x.name+':'+x.price).join(', '):''}
+function res(d){return ContentService.createTextOutput(JSON.stringify(d)).setMimeType(ContentService.MimeType.JSON)}`, 'GASスクリプトをコピーしました')} className="absolute top-2 right-2 bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded text-xs flex items-center gap-1 z-10"><Copy size={12}/> コピー</button>
+                      <pre className="text-green-400 text-[10px] p-4 overflow-x-auto leading-relaxed whitespace-pre-wrap break-all">{`function doGet(e) {
+  const a = e.parameter.action;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (a === 'getMenu') {
+    const sh = ss.getSheetByName('Menu');
+    const items = sh.getDataRange().getValues().slice(1)
+      .filter(r => r[0]).map(r => ({
+        id: r[0], category: r[1], name: r[2],
+        price: Number(r[3]), stock: Number(r[4]), initialStock: Number(r[4]),
+        imageUrl: r[5] || '',        // ← ImageUrl列
+        toppings: parseToppings(r[6] || '')
+      }));
+    return res({ items });
+  }
+  if (a === 'getStaff') {
+    const sh = ss.getSheetByName('Staff');
+    if (!sh) return res({ staff: [] });
+    const staff = sh.getDataRange().getValues().slice(1)
+      .filter(r => r[0]).map(r => ({ name: r[0], shift: r[1]||'', role: r[2]||'' }));
+    return res({ staff });
+  }
+  if (a === 'getSales') {
+    const sh = ss.getSheetByName('Sales');
+    if (!sh) return res({ sales: [] });
+    const lim = Number(e.parameter.limit) || 50;
+    const sales = sh.getDataRange().getValues().slice(1)
+      .filter(r => r[0]).slice(-lim).reverse()
+      .map(r => ({ timestamp:r[0], total:r[1], items:JSON.parse(r[2]||'[]'),
+        paymentMethod:r[3], deviceId:r[4], orderNumber:r[5], staffName:r[6], isCanceled:r[7]||false }));
+    return res({ sales });
+  }
+  if (a === 'ping') return res({ status: 'success' });
+  return res({ status: 'error' });
+}
+function doPost(e) {
+  const data = JSON.parse(e.postData.contents);
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (data.action === 'updateProduct') {
+    const sh = ss.getSheetByName('Menu');
+    const rows = sh.getDataRange().getValues();
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i][0] == data.product.id) {
+        sh.getRange(i+1,1,1,7).setValues([[
+          data.product.id, data.product.category, data.product.name,
+          data.product.price, data.product.stock,
+          data.product.imageUrl || '',  // ← ImageUrl保存
+          strToppings(data.product.toppings||[])
+        ]]);
+        return res({ status: 'success' });
+      }
+    }
+    sh.appendRow([data.product.id, data.product.category, data.product.name,
+      data.product.price, data.product.stock, data.product.imageUrl||'', strToppings(data.product.toppings||[])]);
+    return res({ status: 'success' });
+  }
+  if (data.action === 'deleteProduct') {
+    const sh = ss.getSheetByName('Menu');
+    const rows = sh.getDataRange().getValues();
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i][0] == data.id) { sh.deleteRow(i+1); break; }
+    }
+    return res({ status: 'success' });
+  }
+  const sh = ss.getSheetByName('Sales') || ss.insertSheet('Sales');
+  if (sh.getLastRow() === 0)
+    sh.appendRow(['Date','Total','Items','PaymentMethod','Device','OrderNum','Staff','Canceled']);
+  sh.appendRow([data.timestamp, data.total, JSON.stringify(data.items),
+    data.paymentMethod, data.deviceId, data.orderNumber, data.staffName, data.isCanceled||false]);
+  return res({ status: 'success' });
+}
+function parseToppings(s) {
+  if (!s) return [];
+  return s.split(',').map(t => {
+    const p = t.trim().split(':');
+    return p.length >= 2 ? { name: p[0].trim(), price: parseInt(p[1])||0 } : null;
+  }).filter(t => t && t.name);
+}
+function strToppings(t) { return t&&t.length ? t.map(x=>x.name+':'+x.price).join(', ') : ''; }
+function res(d) {
+  return ContentService.createTextOutput(JSON.stringify(d))
+    .setMimeType(ContentService.MimeType.JSON);
+}`}</pre>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-2">※ デプロイ時は「アクセスできるユーザー：全員」に設定してください。</p>
                   </section>
                 </div>
               </div>
