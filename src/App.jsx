@@ -243,18 +243,22 @@ export default function App() {
       const dataMenu = await resMenu.json();
       if (dataMenu.items) {
         setMenuItems(prev => {
-          const newMap = new Map(dataMenu.items.map(i => [i.id, i]));
-          return prev.map(p => {
-            if (!newMap.has(p.id)) return p;
-            const g = newMap.get(p.id);
+          const localMap = new Map(prev.map(i => [i.id, i]));
+          const gasMap = new Map(dataMenu.items.map(i => [i.id, i]));
+          // 既存ローカル商品をGASデータで更新
+          const updated = prev.map(p => {
+            if (!gasMap.has(p.id)) return p;
+            const g = gasMap.get(p.id);
             return {
               ...p, ...g,
-              // スプシにURLがあれば優先、空なら端末のローカル画像を維持
               imageUrl: g.imageUrl || p.imageUrl,
-              // スプシにトッピングがあれば優先、空なら端末設定を維持
               toppings: (g.toppings && g.toppings.length) ? g.toppings : p.toppings,
+              initialStock: p.initialStock, // ローカルの初期在庫を維持
             };
           });
+          // GASにあってローカルにない商品を追加
+          const newFromGas = dataMenu.items.filter(g => !localMap.has(g.id));
+          return [...updated, ...newFromGas];
         });
       }
       const resStaff = await fetch(`${gasUrl}?action=getStaff`);
@@ -387,23 +391,39 @@ export default function App() {
 
   const saveProduct = async (product) => {
     setIsMenuSyncing(true);
-    if (editingProduct) setMenuItems(prev => prev.map(i => i.id === product.id ? product : i));
-    else setMenuItems(prev => [...prev, { ...product, id: `m-${Date.now()}`, initialStock: product.stock }]);
-    
-    // 画像URLやトッピングはローカルストレージのみ対応とし、GAS更新時のペイロードは現状維持（あるいは拡張しても良いが今回はエラー防止のためそのまま）
+    if (editingProduct) {
+      setMenuItems(prev => prev.map(i => i.id === product.id ? product : i));
+    } else {
+      setMenuItems(prev => [...prev, { ...product, id: `m-${Date.now()}`, initialStock: product.stock }]);
+    }
     if (gasUrl && navigator.onLine && !isQueueMode) {
-      try { await fetch(gasUrl, { method: 'POST', body: JSON.stringify({ action: 'updateProduct', product }) }); showToast('保存しました', 'success'); }
-      catch(e) { showToast('ローカルのみ保存しました', 'warning'); }
+      // base64画像はGASに送らない（サイズ超過防止）
+      const productForGas = { ...product, imageUrl: product.imageUrl?.startsWith('data:') ? '' : (product.imageUrl || '') };
+      try {
+        await fetch(gasUrl, { method: 'POST', body: JSON.stringify({ action: 'updateProduct', product: productForGas }) });
+        showToast('保存しました（クラウド同期済）', 'success');
+      } catch(e) {
+        showToast('ローカルのみ保存しました', 'warning');
+      }
+    } else {
+      showToast('保存しました', 'success');
     }
     setEditingProduct(null); setIsEditMenuModalOpen(false); setIsMenuSyncing(false);
   };
 
   const deleteProduct = async (id) => {
-    if(!window.confirm('削除しますか？')) return;
+    if(!window.confirm('この商品を削除しますか？')) return;
     setIsMenuSyncing(true);
     setMenuItems(prev => prev.filter(i => i.id !== id));
     if (gasUrl && navigator.onLine && !isQueueMode) {
-      try { await fetch(gasUrl, { method: 'POST', body: JSON.stringify({ action: 'deleteProduct', id }) }); } catch(e) {}
+      try {
+        await fetch(gasUrl, { method: 'POST', body: JSON.stringify({ action: 'deleteProduct', id }) });
+        showToast('削除しました（クラウド同期済）', 'success');
+      } catch(e) {
+        showToast('ローカルのみ削除しました', 'warning');
+      }
+    } else {
+      showToast('削除しました', 'success');
     }
     setIsMenuSyncing(false);
   };
@@ -1030,7 +1050,8 @@ function res(d) {
               price: Number(fd.get('price')),
               stock: Number(fd.get('stock')),
               category: fd.get('category'),
-              initialStock: Number(fd.get('stock')),
+              // 編集時は元の初期在庫を維持、新規追加時のみ現在庫を初期在庫にする
+              initialStock: editingProduct ? editingProduct.initialStock : Number(fd.get('stock')),
               imageUrl: editImageUrl,
               toppings: parseToppings(fd.get('toppings'))
             });
