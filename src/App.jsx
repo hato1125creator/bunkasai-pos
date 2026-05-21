@@ -165,6 +165,10 @@ export default function App() {
   const showToast = (message, type = 'info') => setToast({ message, type });
   const play = (type) => playSound(type);
 
+  const handleCopy = (text, successMsg) => {
+    navigator.clipboard.writeText(text).then(() => showToast(successMsg, 'success')).catch(() => showToast('コピーに失敗しました', 'error'));
+  };
+
   const handleImageFileChange = useCallback(async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
