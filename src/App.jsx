@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import pkg from '../package.json';
+const APP_VERSION = pkg.version;
 import { 
   ShoppingCart, Settings, RefreshCw, CheckCircle, BarChart3, 
   X, Edit3, Trash2, ChevronRight, Calculator, Wifi, 
@@ -775,6 +777,7 @@ export default function App() {
                 <div><label className="text-xs font-bold text-slate-500 block mb-2">端末名</label><input type="text" value={deviceName} onChange={e=>setDeviceName(e.target.value)} className="w-full p-2 border rounded-lg bg-slate-50 font-bold text-slate-700" /></div>
                 
                 <div className="pt-4 border-t"><button onClick={() => { if(window.confirm('履歴を全て削除しますか？')) setSalesHistory([]); }} className="w-full py-3 text-red-600 font-bold border border-red-200 rounded-lg hover:bg-red-50 flex items-center justify-center gap-2"><RotateCcw size={18}/> 履歴リセット</button></div>
+                <div className="pt-4 border-t text-center text-xs text-slate-400">bunkasai-pos v{APP_VERSION}</div>
               </div>
             </div>
           )}
